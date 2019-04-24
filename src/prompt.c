@@ -6,8 +6,12 @@
 
 #include "mpc.h"
 
-#define LASSERT(args, cond, err) \
-  if(!(cond)) { lval_del(args); return lval_err(err); }
+#define LASSERT(args, cond, fmt, ...) \
+  if(!(cond)) { \
+  lval* err = lval_err(fmt, ##__VA_ARGS__); \
+  lval_del(args); \
+  return err; \
+  }
 
 struct lval;
 struct lenv;
@@ -44,11 +48,22 @@ lval* lval_num(long x){
   return v;
 }
 
-lval* lval_err(char* m) {
+lval* lval_err(char* fmt, ...) {
   lval* v = malloc(sizeof(lval));
   v->type = LVAL_ERR;
-  v->err = malloc(strlen(m) + 1);
-  strcpy(v->err, m);
+
+  va_list va;
+  va_start(va, fmt);
+
+  v->err = malloc(512);
+
+  vsnprintf(v->err, 511, fmt, va);
+
+  v->err = realloc(v->err, strlen(v->err) + 1);
+
+  va_end(va);
+
+  return v;
   return v;
 }
 
@@ -158,7 +173,7 @@ lval* lenv_get(lenv* e, lval* k) {
     }
   }
 
-  return lval_err("unbound symbol");
+  return lval_err("Unbound Symbol '%s'", k->sym);
 }
 
 void lenv_put(lenv* e, lval* k, lval* v) {
@@ -282,9 +297,24 @@ lval* lval_join(lval* x, lval* y) {
   return x;
 }
 
+char* ltype_name(int t) {
+  switch(t) {
+  case LVAL_FUN: return "Function";
+  case LVAL_NUM: return "Number";
+  case LVAL_ERR: return "Error";
+  case LVAL_SYM: return "Symbol";
+  case LVAL_SEXPR: return "S-Expression";
+  case LVAL_QEXPR: return "Q-Expression";
+  default: return "Unknown";
+  }
+}
+
 lval* builtin_head(lenv* e, lval* a) {
   LASSERT(a, a->count == 1,
-          "Function 'head' passed too many arguments.");
+          "Function 'head' passed too many arguments."
+          "Got %i, Expected %i.",
+          a->count, 1);
+
   LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
           "Function 'head' passed incorrect type.");
   LASSERT(a, a->cell[0]->count != 0,
@@ -338,6 +368,29 @@ lval* builtin_join(lenv* e, lval* a) {
 
   lval_del(a);
   return x;
+}
+
+lval* builtin_def(lenv* e, lval* a) {
+  LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+          "Function 'def' passed incorrect type");
+
+  lval* syms = a->cell[0];
+
+  for(int i = 0; i < syms->count; i++) {
+    LASSERT(a, syms->cell[i]->type == LVAL_SYM,
+            "Function 'd'ef cannot define non-symbol");
+  }
+
+  LASSERT(a, syms->count == a->count - 1,
+          "Function 'def' cannot define inccorect number of values "
+          "to symbols");
+
+  for(int i = 0; i < syms->count; i++) {
+    lenv_put(e, syms->cell[i], a->cell[i+1]);
+  }
+
+  lval_del(a);
+  return lval_sexpr();
 }
 
 lval* builtin_op(lenv* e, lval* a, char* op) {
@@ -407,6 +460,7 @@ void lenv_add_builtins(lenv* e) {
   lenv_add_builtin(e, "tail", builtin_tail);
   lenv_add_builtin(e, "eval", builtin_eval);
   lenv_add_builtin(e, "join", builtin_join);
+  lenv_add_builtin(e, "def",  builtin_def);
 
   lenv_add_builtin(e, "+", builtin_add);
   lenv_add_builtin(e, "-", builtin_sub);
