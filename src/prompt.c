@@ -316,7 +316,10 @@ lval* builtin_head(lenv* e, lval* a) {
           a->count, 1);
 
   LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
-          "Function 'head' passed incorrect type.");
+          "Function 'head' passed incorrect type for argument 0. "
+          "Got %s, Expected %s.",
+          ltype_name(a->cell[0]->type), ltype_name(LVAL_QEXPR));
+
   LASSERT(a, a->cell[0]->count != 0,
           "Function 'head' pass {}!");
 
