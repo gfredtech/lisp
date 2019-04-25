@@ -356,7 +356,7 @@ void lval_print(lval *v) {
     if (v->builtin) {
       printf("<builtin>");
     } else {
-      printf("\\ ");
+      printf("(\\ ");
       lval_print(v->formals);
       putchar(' ');
       lval_print(v->body);
